@@ -10,6 +10,7 @@
 import numpy as np
 from fast_rcnn.config import cfg
 import utils.cython_bbox
+from copy import deepcopy
 
 def prepare_roidb(imdb):
     """Enrich the imdb's roidb by adding some derived quantities that
@@ -36,6 +37,40 @@ def prepare_roidb(imdb):
         # max overlap > 0 => class should not be zero (must be a fg class)
         nonzero_inds = np.where(max_overlaps > 0)[0]
         assert all(max_classes[nonzero_inds] != 0)
+    
+
+def prepare_roidb_storage(imdb):
+    """Enrich the imdb's roidb by adding some derived quantities that
+    are useful for training. This function precomputes the maximum
+    overlap, taken over ground-truth boxes, between each ROI and
+    each ground-truth box. The class with maximum overlap is also
+    recorded.
+    """
+    roidb_storage = imdb.roidb_storage
+    for i in xrange(len(imdb.image_index)):
+        image_path = imdb.image_path_at(i)
+        # get the row from lmdb
+        row = roidb_storage.get_row_from_db(image_path)
+        
+        # need gt_overlaps as a dense array for argmax
+        gt_overlaps = row['gt_overlaps'].toarray()
+        # max overlap with gt over classes (columns)
+        max_overlaps = gt_overlaps.max(axis=1)
+        # gt class that had the max overlap
+        max_classes = gt_overlaps.argmax(axis=1)
+
+        # store the updated row into lmdb
+        roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
+                                            row['flipped'], max_classes, max_overlaps)
+
+        # sanity checks
+        # max overlap of 0 => class should be zero (background)
+        zero_inds = np.where(max_overlaps == 0)[0]
+        assert all(max_classes[zero_inds] == 0)
+        # max overlap > 0 => class should not be zero (must be a fg class)
+        nonzero_inds = np.where(max_overlaps > 0)[0]
+        assert all(max_classes[nonzero_inds] != 0)
+
 
 def add_bbox_regression_targets(roidb):
     """Add information needed to train bounding-box regressors."""
@@ -49,8 +84,7 @@ def add_bbox_regression_targets(roidb):
         rois = roidb[im_i]['boxes']
         max_overlaps = roidb[im_i]['max_overlaps']
         max_classes = roidb[im_i]['max_classes']
-        roidb[im_i]['bbox_targets'] = \
-                _compute_targets(rois, max_overlaps, max_classes)
+        roidb[im_i]['bbox_targets'] = _compute_targets(rois, max_overlaps, max_classes)
 
     # Compute values needed for means and stds
     # var(x) = E(x^2) - E(x)^2
@@ -80,6 +114,63 @@ def add_bbox_regression_targets(roidb):
     # These values will be needed for making predictions
     # (the predicts will need to be unnormalized and uncentered)
     return means.ravel(), stds.ravel()
+
+
+def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
+    """Add information needed to train bounding-box regressors."""
+    assert roidb_storage.get_stat() > 0
+    _row = roidb_storage.get_row_from_db(imdb.image_path_at(0))
+    assert 'max_classes' in _row, 'Did you call prepare_roidb first?'
+
+    num_images = len(imdb.image_index)
+    bbox_targets = []
+    for i in xrange(num_images):
+        image_path = imdb.image_path_at(i)
+        # get the row from lmdb
+        row = roidb_storage.get_row_from_db(image_path)
+
+        rois = row['boxes']
+        max_overlaps = row['max_overlaps']
+        max_classes = row['max_classes']
+        bbox_targets[i] = _compute_targets(rois, max_overlaps, max_classes)
+
+    # Compute values needed for means and stds
+    # var(x) = E(x^2) - E(x)^2
+    class_counts = np.zeros((num_classes, 1)) + cfg.EPS
+    sums = np.zeros((num_classes, 4))
+    squared_sums = np.zeros((num_classes, 4))
+    for im_i in xrange(num_images):
+        targets = bbox_targets[i]
+        for cls in xrange(1, num_classes):
+            cls_inds = np.where(targets[:, 0] == cls)[0]
+            if cls_inds.size > 0:
+                class_counts[cls] += cls_inds.size
+                sums[cls, :] += targets[cls_inds, 1:].sum(axis=0)
+                squared_sums[cls, :] += (targets[cls_inds, 1:] ** 2).sum(axis=0)
+
+    means = sums / class_counts
+    stds = np.sqrt(squared_sums / class_counts - means ** 2)
+
+    # Normalize targets
+    for im_i in xrange(num_images):
+        targets = bbox_targets[i]
+        targets_copy = deepcopy(targets)
+        for cls in xrange(1, num_classes):
+            cls_inds = np.where(targets[:, 0] == cls)[0]
+            targets_copy[cls_inds, 1:] -= means[cls, :]
+            targets_copy[cls_inds, 1:] /= stds[cls, :]
+
+        # get the row from lmdb
+        image_path = imdb.image_path_at(i)
+        row = roidb_storage.get_row_from_db(image_path)
+        # store the updated row into lmdb
+        roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
+                                            row['flipped'], row['max_classes'], row['max_overlaps'], targets_copy)
+
+    # These values will be needed for making predictions
+    # (the predicts will need to be unnormalized and uncentered)
+    return means.ravel(), stds.ravel()
+
 
 def _compute_targets(rois, overlaps, labels):
     """Compute bounding-box regression targets for an image."""

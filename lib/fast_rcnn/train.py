@@ -23,14 +23,13 @@ class SolverWrapper(object):
     use to unnormalize the learned bounding-box regression weights.
     """
 
-    def __init__(self, solver_prototxt, roidb, output_dir,
-                 pretrained_model=None):
+    def __init__(self, solver_prototxt, roidb, imdb, output_dir, pretrained_model=None):
         """Initialize the SolverWrapper."""
         self.output_dir = output_dir
 
         print 'Computing bounding-box regression targets...'
-        self.bbox_means, self.bbox_stds = \
-                rdl_roidb.add_bbox_regression_targets(roidb)
+        # self.bbox_means, self.bbox_stds = rdl_roidb.add_bbox_regression_targets(roidb)
+        self.bbox_means, self.bbox_stds = rdl_roidb.add_bbox_regression_targets_into_storage(imdb, roidb)
         print 'done'
 
         self.solver = caffe.SGDSolver(solver_prototxt)
@@ -113,11 +112,22 @@ def get_training_roidb(imdb):
 
     return imdb.roidb
 
-def train_net(solver_prototxt, roidb, output_dir,
-              pretrained_model=None, max_iters=40000):
+def get_training_roidb_storage(imdb):
+    """Returns a roidb (Region of Interest database) for use in training."""
+    if cfg.TRAIN.USE_FLIPPED:
+        print 'Appending horizontally-flipped training examples...'
+        imdb.append_flipped_images_in_storage()
+        print 'done'
+
+    print 'Preparing training data...'
+    rdl_roidb.prepare_roidb_storage(imdb)
+    print 'done'
+
+    return imdb.roidb_storage
+
+def train_net(solver_prototxt, roidb_storage, imdb, output_dir, pretrained_model=None, max_iters=40000):
     """Train a Fast R-CNN network."""
-    sw = SolverWrapper(solver_prototxt, roidb, output_dir,
-                       pretrained_model=pretrained_model)
+    sw = SolverWrapper(solver_prototxt, roidb_storage, imdb, output_dir, pretrained_model=pretrained_model)
 
     print 'Solving...'
     sw.train_model(max_iters)
