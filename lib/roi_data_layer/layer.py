@@ -22,12 +22,14 @@ class RoIDataLayer(caffe.Layer):
 
     def _shuffle_roidb_inds(self):
         """Randomly permute the training roidb."""
-        self._perm = np.random.permutation(np.arange(len(self._roidb)))
+        # self._perm = np.random.permutation(np.arange(len(self._roidb)))
+        self._perm = np.random.permutation(np.arange(self._roidb.get_stat()))
         self._cur = 0
 
     def _get_next_minibatch_inds(self):
         """Return the roidb indices for the next minibatch."""
-        if self._cur + cfg.TRAIN.IMS_PER_BATCH >= len(self._roidb):
+        # if self._cur + cfg.TRAIN.IMS_PER_BATCH >= len(self._roidb):
+        if self._cur + cfg.TRAIN.IMS_PER_BATCH >= self._roidb.get_stat():
             self._shuffle_roidb_inds()
 
         db_inds = self._perm[self._cur:self._cur + cfg.TRAIN.IMS_PER_BATCH]
@@ -44,12 +46,36 @@ class RoIDataLayer(caffe.Layer):
             return self._blob_queue.get()
         else:
             db_inds = self._get_next_minibatch_inds()
-            minibatch_db = [self._roidb[i] for i in db_inds]
+            minibatch_db = []
+            for i in db_inds:
+                image_path = self._imdb.image_path_at(i)
+                row = roidb.get_row_from_db(image_path)
+                minibatch_db.append(row)
+            # minibatch_db = [self._roidb[i] for i in db_inds]
             return get_minibatch(minibatch_db, self._num_classes)
 
     def set_roidb(self, roidb):
         """Set the roidb to be used by this layer during training."""
         self._roidb = roidb
+        self._shuffle_roidb_inds()
+        if cfg.TRAIN.USE_PREFETCH:
+            self._blob_queue = Queue(10)
+            self._prefetch_process = BlobFetcher(self._blob_queue,
+                                                 self._roidb,
+                                                 self._num_classes)
+            self._prefetch_process.start()
+            # Terminate the child process when the parent exists
+            def cleanup():
+                print 'Terminating BlobFetcher'
+                self._prefetch_process.terminate()
+                self._prefetch_process.join()
+            import atexit
+            atexit.register(cleanup)
+
+    def set_roidb_storage(self, roidb, imdb):
+        """Set the roidb to be used by this layer during training."""
+        self._roidb = roidb
+        self._imdb = imdb
         self._shuffle_roidb_inds()
         if cfg.TRAIN.USE_PREFETCH:
             self._blob_queue = Queue(10)
