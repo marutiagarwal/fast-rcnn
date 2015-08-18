@@ -13,7 +13,7 @@ import cv2
 from fast_rcnn.config import cfg
 from utils.blob import prep_im_for_blob, im_list_to_blob
 
-def get_minibatch(roidb, imdb, num_classes):
+def get_minibatch(roidb, num_classes):
     """Given a roidb, construct a minibatch sampled from it."""
     num_images = len(roidb)
     # Sample random scales to use for each image in this batch
@@ -35,10 +35,8 @@ def get_minibatch(roidb, imdb, num_classes):
     bbox_loss_blob = np.zeros(bbox_targets_blob.shape, dtype=np.float32)
     # all_overlaps = []
     for im_i in xrange(num_images):
-        image_path = imdb.image_path_at(im_i)
-        roidb_i = roidb.get_row_from_db(image_path)
         labels, overlaps, im_rois, bbox_targets, bbox_loss \
-            = _sample_rois(roidb_i, fg_rois_per_image, rois_per_image, num_classes)
+            = _sample_rois(roidb[im_i], fg_rois_per_image, rois_per_image, num_classes)
 
         # Add to RoIs blob
         rois = _project_im_rois(im_rois, im_scales[im_i])
@@ -106,9 +104,7 @@ def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
     overlaps = overlaps[keep_inds]
     rois = rois[keep_inds]
 
-    bbox_targets, bbox_loss_weights = \
-            _get_bbox_regression_labels(roidb['bbox_targets'][keep_inds, :],
-                                        num_classes)
+    bbox_targets, bbox_loss_weights = _get_bbox_regression_labels(roidb['bbox_targets'][keep_inds, :], num_classes)
 
     return labels, overlaps, rois, bbox_targets, bbox_loss_weights
 

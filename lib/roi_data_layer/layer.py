@@ -52,7 +52,7 @@ class RoIDataLayer(caffe.Layer):
                 row = self._roidb.get_row_from_db(image_path)
                 minibatch_db.append(row)
             # minibatch_db = [self._roidb[i] for i in db_inds]
-            return get_minibatch(minibatch_db, self._imdb, self._num_classes)
+            return get_minibatch(minibatch_db, self._num_classes)
 
     def set_roidb(self, roidb):
         """Set the roidb to be used by this layer during training."""
