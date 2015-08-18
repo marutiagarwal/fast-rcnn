@@ -125,12 +125,13 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
     _row = roidb_storage.get_row_from_db(imdb.image_path_at(0))
     assert 'max_classes' in _row, 'Did you call prepare_roidb first?'
 
-    num_images = len(imdb.image_index)
+    num_images = roidb_storage.get_stat() #len(imdb.image_index)
     print 'add_bbox_regression_targets:: num_images = ',num_images
+    print 'add_bbox_regression_targets:: roidb_storage.get_stat() = ',roidb_storage.get_stat()
     bbox_targets = []
     for i in xrange(num_images):
         image_path = imdb.image_path_at(i)
-        print 'image_path = ',image_path
+        #print 'image_path = ',image_path
         # get the row from lmdb
         row = roidb_storage.get_row_from_db(image_path)
         print 'i = %d, row = %s'%(i,row)
@@ -138,13 +139,14 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
         max_overlaps = row['max_overlaps']
         max_classes = row['max_classes']
         bbox = _compute_targets(rois, max_overlaps, max_classes)
+        print 'add_bbox_regression_targets:: bbox = ',bbox
         bbox_targets.append(bbox)
 
     # Compute values needed for means and stds
     # var(x) = E(x^2) - E(x)^2
-    print '_dd_bbox_regression_targets:: row[gt_overlaps] = ',_row['gt_overlaps']
+    #print 'add_bbox_regression_targets:: row[gt_overlaps] = ',_row['gt_overlaps']
     num_classes = _row['gt_overlaps'].shape[1]
-    print 'num_classes = ',num_classes
+    #print 'num_classes = ',num_classes
     class_counts = np.zeros((num_classes, 1)) + cfg.EPS
     sums = np.zeros((num_classes, 4))
     squared_sums = np.zeros((num_classes, 4))
@@ -173,6 +175,7 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
         image_path = imdb.image_path_at(i)
         row = roidb_storage.get_row_from_db(image_path)
         # store the updated row into lmdb
+        #print 'add_bbox_regression_targets:: targets_copy = ',targets_copy
         roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
                                             row['flipped'], row['max_classes'], row['max_overlaps'], targets_copy)
 
