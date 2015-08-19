@@ -62,6 +62,8 @@ def prepare_roidb_storage(imdb):
         # gt class that had the max overlap
         max_classes = gt_overlaps.argmax(axis=1)
 
+        #print 'max_overlaps = ',max_overlaps
+        #print 'max_classes = ',max_classes
         # store the updated row into lmdb
         roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
                                             row['flipped'], max_classes, max_overlaps)
@@ -134,12 +136,12 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
         #print 'image_path = ',image_path
         # get the row from lmdb
         row = roidb_storage.get_row_from_db(image_path)
-        print 'i = %d, row = %s'%(i,row)
+        #print 'i = %d, row = %s'%(i,row)
         rois = row['boxes']
         max_overlaps = row['max_overlaps']
         max_classes = row['max_classes']
         bbox = _compute_targets(rois, max_overlaps, max_classes)
-        print 'add_bbox_regression_targets:: bbox = ',bbox
+        #print 'add_bbox_regression_targets:: bbox = ',bbox
         bbox_targets.append(bbox)
 
     # Compute values needed for means and stds
