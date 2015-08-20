@@ -48,9 +48,9 @@ def prepare_roidb_storage(imdb):
     """
     roidb_storage = imdb.roidb_storage
     for i in xrange(len(imdb.image_index)):
-        image_path = imdb.image_path_at(i)
+        # image_path = imdb.image_path_at(i)
         # get the row from lmdb
-        row = roidb_storage.get_row_from_db(image_path)
+        row = roidb_storage.get_row_from_db(i)
         #print 'prepare_roidb_storage:: row = ',row
         # need gt_overlaps as a dense array for argmax
         #gt_overlaps = row['gt_overlaps'].toarray()
@@ -64,9 +64,10 @@ def prepare_roidb_storage(imdb):
 
         #print 'max_overlaps = ',max_overlaps
         #print 'max_classes = ',max_classes
-        # store the updated row into lmdb
+        
+        # store the UPDATED row into lmdb
         roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
-                                            row['flipped'], max_classes, max_overlaps)
+                                            row['flipped'], i, max_classes, max_overlaps)
 
         # sanity checks
         # max overlap of 0 => class should be zero (background)
@@ -124,18 +125,17 @@ def add_bbox_regression_targets(roidb):
 def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
     """Add information needed to train bounding-box regressors."""
     assert roidb_storage.get_stat() > 0
-    _row = roidb_storage.get_row_from_db(imdb.image_path_at(0))
+    _row = roidb_storage.get_row_from_db(0)
     assert 'max_classes' in _row, 'Did you call prepare_roidb first?'
 
-    num_images = roidb_storage.get_stat() #len(imdb.image_index)
+    num_images = roidb_storage.get_stat()
     print 'add_bbox_regression_targets:: num_images = ',num_images
-    print 'add_bbox_regression_targets:: roidb_storage.get_stat() = ',roidb_storage.get_stat()
     bbox_targets = []
     for i in xrange(num_images):
-        image_path = imdb.image_path_at(i)
+        # image_path = imdb.image_path_at(i)
         #print 'image_path = ',image_path
         # get the row from lmdb
-        row = roidb_storage.get_row_from_db(image_path)
+        row = roidb_storage.get_row_from_db(i)
         #print 'i = %d, row = %s'%(i,row)
         rois = row['boxes']
         max_overlaps = row['max_overlaps']
@@ -166,7 +166,7 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
 
     # Normalize targets
     for im_i in xrange(num_images):
-        targets = bbox_targets[i]
+        targets = bbox_targets[im_i]
         targets_copy = deepcopy(targets)
         for cls in xrange(1, num_classes):
             cls_inds = np.where(targets[:, 0] == cls)[0]
@@ -174,12 +174,13 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
             targets_copy[cls_inds, 1:] /= stds[cls, :]
 
         # get the row from lmdb
-        image_path = imdb.image_path_at(i)
-        row = roidb_storage.get_row_from_db(image_path)
-        # store the updated row into lmdb
+        # image_path = imdb.image_path_at(im_i)
+        row = roidb_storage.get_row_from_db(im_i)
         #print 'add_bbox_regression_targets:: targets_copy = ',targets_copy
+        
+        # store the UPDATED row into lmdb
         roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
-                                            row['flipped'], row['max_classes'], row['max_overlaps'], targets_copy)
+                                            row['flipped'], im_i, row['max_classes'], row['max_overlaps'], targets_copy)
 
     # These values will be needed for making predictions
     # (the predicts will need to be unnormalized and uncentered)
