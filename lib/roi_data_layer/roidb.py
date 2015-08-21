@@ -65,6 +65,7 @@ def prepare_roidb_storage(imdb):
         #print 'max_overlaps = ',max_overlaps
         #print 'max_classes = ',max_classes
         
+        image_path = imdb.image_path_at(i) 
         # store the UPDATED row into lmdb
         roidb_storage.store_row_roidb_to_db(image_path, row['boxes'], row['gt_overlaps'], row['gt_classes'], \
                                             row['flipped'], i, max_classes, max_overlaps)
@@ -174,7 +175,7 @@ def add_bbox_regression_targets_into_storage(imdb, roidb_storage):
             targets_copy[cls_inds, 1:] /= stds[cls, :]
 
         # get the row from lmdb
-        # image_path = imdb.image_path_at(im_i)
+        image_path = imdb.image_path_at(im_i)
         row = roidb_storage.get_row_from_db(im_i)
         #print 'add_bbox_regression_targets:: targets_copy = ',targets_copy
         
