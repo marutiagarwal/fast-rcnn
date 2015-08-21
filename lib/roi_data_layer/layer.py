@@ -48,8 +48,8 @@ class RoIDataLayer(caffe.Layer):
             db_inds = self._get_next_minibatch_inds()
             minibatch_db = []
             for i in db_inds:
-                image_path = self._imdb.image_path_at(i)
-                row = self._roidb.get_row_from_db(image_path)
+                # image_path = self._imdb.image_path_at(i)
+                row = self._roidb.get_row_from_db(i)
                 minibatch_db.append(row)
             # minibatch_db = [self._roidb[i] for i in db_inds]
             return get_minibatch(minibatch_db, self._num_classes)
